@@ -736,9 +736,9 @@ const thinking = [
 const goodBye = [
     "Okay, see ya!",
     "All right, see you!",
-    "Got it, bye!",
+    "Got it, bye",
     "Got it, see ya!",
-    "Okay, bye!"
+    "Okay, bye"
 ];
 const firstOfAll = [
     "First of all, ",
@@ -826,10 +826,9 @@ const checkOnYou = [
 const positiveFiller = [
     "...Okay...",
     "...Let's see...",
-    "...Yes...",
+    "...Understood...",
     "...Right...",
-    "...All right...",
-    "...Huh..."
+    "...All right..."
 ];
 const fillerWords = [
     "...Umm...",
@@ -841,6 +840,12 @@ const affirmativeFiller = [
     "Great!...",
     "Cool!...",
     "Awesome!..."
+];
+const askMeAnything = [
+    "Ask me anything related to items, enemies or tell me if you need help in battle",
+    "If you want any information about an item or enemy, or if you want help in battle, let me know",
+    "Tell me about the information you want to know about an enemy, an item or let me know if you need help in battle",
+    "Ask me about an enemy, an item, or tell me if you need help in battle"
 ];
 const offTopic = [
     "Sorry, but I can only help with FF12 related stuff",
@@ -947,6 +952,7 @@ Looking at the features for each "Location" entry, try to detect the place that 
 Sometimes the place will be explicitly given to you, and sometime you will have to infer it from the characteristics.
 Give you answer back in the form of a JSON object of the form: {"location" : <location>}. 
 If you can't detect any location, please, give back "unknown" as a value.
+If you detect that the sentences entails that they do "not want this information anymore",that they want to "go back", to "cancel", etc.,then, please, give back "cancel" as a value.
 This is the dictionary: ${JSON.stringify((0, _ff12DataLocationEnemyDictJsonDefault.default))}.
 This is the sentence: 
 `;
@@ -1049,8 +1055,14 @@ const dmMachine = (0, _xstate.createMachine)({
                                 SPEAK_COMPLETE: "AskMeAnything"
                             }
                         },
+                        BeforeAskMeAnything: {
+                            entry: say(`${getRandomItemFromArray(positiveFiller)}`),
+                            on: {
+                                SPEAK_COMPLETE: "AskMeAnything"
+                            }
+                        },
                         AskMeAnything: {
-                            entry: say("Ask me about an enemy, an item, or tell me if you need help in battle"),
+                            entry: say(`${getRandomItemFromArray(askMeAnything)}`),
                             on: {
                                 SPEAK_COMPLETE: "AskGPT"
                             }
@@ -1632,7 +1644,7 @@ const dmMachine = (0, _xstate.createMachine)({
                             entry: say(`${getRandomItemFromArray(fillerWords)}, ${getRandomItemFromArray(positiveFiller)} `),
                             on: {
                                 SPEAK_COMPLETE: {
-                                    target: "ProcessGPT",
+                                    target: "ProcessGPT.FilterInfoGPT",
                                     actions: [
                                         ({ context })=>console.log(context.item, (0, _ff12DataArmorDictJsonDefault.default)[context.item]["info"]),
                                         (0, _xstate.assign)({
@@ -1660,7 +1672,7 @@ const dmMachine = (0, _xstate.createMachine)({
                             entry: say(`${getRandomItemFromArray(fillerWords)}, ${getRandomItemFromArray(positiveFiller)} `),
                             on: {
                                 SPEAK_COMPLETE: {
-                                    target: "ProcessGPT",
+                                    target: "ProcessGPT.FilterInfoGPT",
                                     actions: [
                                         ({ context })=>console.log(context.item, (0, _ff12DataAmmoDictJsonDefault.default)[context.item]["info"]),
                                         (0, _xstate.assign)({
@@ -1688,7 +1700,7 @@ const dmMachine = (0, _xstate.createMachine)({
                             entry: say(`${getRandomItemFromArray(fillerWords)}, ${getRandomItemFromArray(positiveFiller)} `),
                             on: {
                                 SPEAK_COMPLETE: {
-                                    target: "ProcessGPT",
+                                    target: "ProcessGPT.FilterInfoGPT",
                                     actions: [
                                         ({ context })=>console.log(context.item, (0, _ff12DataAccessoryDictJsonDefault.default)[context.item]["info"]),
                                         (0, _xstate.assign)({
@@ -1699,7 +1711,7 @@ const dmMachine = (0, _xstate.createMachine)({
                             }
                         },
                         GetItem: {
-                            entry: say(`${getRandomItemFromArray(fillerWords)}, ${getRandomItemFromArray(particular)} accessory? `),
+                            entry: say(`${getRandomItemFromArray(fillerWords)}, ${getRandomItemFromArray(particular)} item? `),
                             on: {
                                 SPEAK_COMPLETE: {
                                     target: "ProcessGPT",
@@ -1716,7 +1728,7 @@ const dmMachine = (0, _xstate.createMachine)({
                             entry: say(`${getRandomItemFromArray(fillerWords)}, ${getRandomItemFromArray(positiveFiller)} `),
                             on: {
                                 SPEAK_COMPLETE: {
-                                    target: "ProcessGPT",
+                                    target: "ProcessGPT.FilterInfoGPT",
                                     actions: [
                                         ({ context })=>console.log(context.item, (0, _ff12DataItemDictJsonDefault.default)[context.item]["info"]),
                                         (0, _xstate.assign)({
@@ -1745,7 +1757,7 @@ const dmMachine = (0, _xstate.createMachine)({
                             entry: say(`${getRandomItemFromArray(fillerWords)}, ${getRandomItemFromArray(positiveFiller)} `),
                             on: {
                                 SPEAK_COMPLETE: {
-                                    target: "ProcessGPT",
+                                    target: "ProcessGPT.FilterInfoGPT",
                                     actions: [
                                         ({ context })=>console.log(context.item, (0, _ff12DataLootDictJsonDefault.default)[context.item]),
                                         (0, _xstate.assign)({
@@ -2418,23 +2430,26 @@ const dmMachine = (0, _xstate.createMachine)({
                         AnythingElse: {
                             entry: say(`${getRandomItemFromArray(positiveFiller)} Is there anything else you want to check?`),
                             on: {
-                                SPEAK_COMPLETE: "ContinueOrNot"
+                                SPEAK_COMPLETE: {
+                                    target: "ContinueOrNot"
+                                }
                             }
                         },
                         ContinueOrNot: {
                             entry: listen(),
                             on: {
                                 RECOGNISED: [
+                                    // error when reading AskGPT
                                     {
-                                        guard: ({ event })=>checkList(event.value[0].utterance.toLowerCase(), affirmation),
-                                        target: "AskGPT"
+                                        guard: ({ event, context })=>checkList(event.value[0].utterance.toLowerCase(), affirmation),
+                                        target: "BeforeAskMeAnything"
                                     },
                                     {
-                                        guard: ({ event })=>checkList(event.value[0].utterance.toLowerCase(), negation),
+                                        guard: ({ event, context })=>checkList(event.value[0].utterance.toLowerCase(), negation),
                                         target: "OkaySeeYa"
                                     },
                                     {
-                                        target: "AskGPT"
+                                        target: "BeforeAskMeAnything"
                                     }
                                 ]
                             }
@@ -2446,7 +2461,7 @@ const dmMachine = (0, _xstate.createMachine)({
                             }
                         },
                         Bye: {
-                            type: "final"
+                            target: "#root"
                         }
                     }
                 }
