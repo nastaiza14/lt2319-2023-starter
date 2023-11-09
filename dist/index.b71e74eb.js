@@ -613,7 +613,6 @@ var _ff12DataLootListJsonDefault = parcelHelpers.interopDefault(_ff12DataLootLis
 // simplified dict, instead of genus_dict
 var _ff12DataGenusDictNolinksJson = require("../FF12data-genus_dict_nolinks.json");
 var _ff12DataGenusDictNolinksJsonDefault = parcelHelpers.interopDefault(_ff12DataGenusDictNolinksJson);
-// console.log(item_list) > > > perfect!
 const azureCredentials = {
     endpoint: "https://northeurope.api.cognitive.microsoft.com/sts/v1.0/issuetoken",
     key: "b7f17fcf06584fff85c25a0b297ddf00"
@@ -755,10 +754,11 @@ const understanding = [
     "Sure, "
 ];
 const notUnderstanding = [
-    "Sorry, couldn't quite catch that",
-    "Sorry, couldn't catch that",
-    "Wait, what was that again?",
-    "Sorry, what?"
+    "Sorry... couldn't quite catch that",
+    "Sorry... couldn't catch that",
+    "Wait... what was that again?",
+    "Sorry... what?",
+    "Sorry...Can you repeat that?"
 ];
 const particular = [
     "Anything in particular that you want to know about this ",
@@ -912,11 +912,11 @@ const getRelevantStatus = (anarray)=>{
     const randomRelevantStatus = getRandomItemFromArray(finalStatus);
     return randomRelevantStatus;
 };
-const oki = getVulnerableStatuses((0, _ff12DataEnemyEncyclopediaJsonDefault.default)["Mu"]["info"]["Statuses and immunities"]);
-console.log(oki);
-console.log(getRelevantStatus(oki));
-const oko = getElementalWeakness((0, _ff12DataEnemyEncyclopediaJsonDefault.default)["Mu"]["info"]["Elemental affinities"]);
-console.log(oko);
+// const oki = getVulnerableStatuses(enemy_encyclopedia["Mu"]["info"]["Statuses and immunities"])
+// console.log(oki)
+// console.log(getRelevantStatus(oki))
+// const oko = getElementalWeakness(enemy_encyclopedia["Mu"]["info"]["Elemental affinities"])
+// console.log(oko)
 // INTENTS Get loot info, Check success strategy, Get bazaar or item info
 // I was gonna use this for the prompt, when detecting a single enemy: If the sentence matches any of these items (array with all the enemy names), put that name in the <intent> slot, but maybe its not a good idea
 //const ItemEnemyLootIntentsPrompt: string = `Hey, GPT! Here's a JSON object: {"intent": <intent> }. Could you please let me know if the following sentence request has any of the intents in the list?: Intents: get loot info, check success strategy, get bazaar or item info, thinking ? If the sentence imply they are thinking about what they want to say, or if the sentence consists of an exclamation such as "umm" or "uhh", put <thinking> as the intent. VERY IMPORTANT: If there's no match, keep the intent empty. Put the correct intent in the JSON object. JUST ANSWER WITH THE JSON OBJECT, PLEASE. This is the sentence: `;
@@ -965,7 +965,7 @@ Don't give back an "enemy" that is not in the "Location enemy list".
 Please, give you answer back in the form of a JSON object of the form: {"enemy" : <enemy>}. 
 If you can't detect any enemy, please give back "unknown" as a value.
 If you want to answer something like "Dreamhare" bear in mind that it would be the name of the class, and not a concrete enemy. Don't use Class (second level) but enemy (third level) values.
-This is the dictionary: ${JSON.stringify((0, _ff12DataGenusDictNolinksJsonDefault.default)).replace("{", "\n").replace("}", "\n").replace('"', "")}
+This is the dictionary: ${JSON.stringify((0, _ff12DataGenusDictNolinksJsonDefault.default)).replace("{", "\n").replace("}", "\n").replace('"', "").replace('":"', " : ").replace('","', " , ")}
 `;
 //Difficult to recycle prompts
 // about an item or an enemy. If I give you information about an item, please, ..., if I give information about an enemy, please give me a summarized information about the "Items".
@@ -977,6 +977,7 @@ Please, start with the name of the weapon (at the beginning of the "Information"
 If you get information about the bazaar, for example: "Bazaar: The Sunflower", say something like: "The name of the bazaar PACKAGE is The Sunflower".
 If you are given a weapon, the value for "Stats: " include "Attack", "Evade", and "Combo Chance".
 JUST ANSWER THE QUESTION, DON'T GIVE ANY OTHER SENTENCES, PLEASE.
+If you detect that the sentences entails that they do "not want this information anymore",that they want to "go back", to "cancel", etc.,then, please, give back "cancel" as a value.
 If you consider the sentence to be unrelated, say: "Sorry, what information do you want to know about the item again?"
 Information: 
 `;
@@ -988,6 +989,7 @@ However, in the case that I give you a "Sentence" requesting specific informatio
 It is possible that the sentence consists only of the name of the enemy, for example: "Pyrolisk", in that case, just stick to the initial instruction.
 If the sentence is asking "where", try to see if the question is asking for "Location".
 JUST ANSWER THE QUESTION, DON'T GIVE ANY OTHER SENTENCES, PLEASE. Also, you don't need to be too formal.
+If you detect that the sentences entails that they do "not want this information anymore",that they want to "go back", to "cancel", etc.,then, please, give back "cancel" as a value.
 If you consider the sentence to be unrelated, say: "Sorry, what information do you want to know about the enemy again?"
 Information: 
 `;
@@ -1053,6 +1055,12 @@ const dmMachine = (0, _xstate.createMachine)({
                             entry: "speak.greeting",
                             on: {
                                 SPEAK_COMPLETE: "AskMeAnything"
+                            }
+                        },
+                        TransitionJustBecause: {
+                            entry: say(`${getRandomItemFromArray(affirmation)}`),
+                            on: {
+                                SPEAK_COMPLETE: "RecognizeEntities"
                             }
                         },
                         BeforeAskMeAnything: {
@@ -1361,6 +1369,10 @@ const dmMachine = (0, _xstate.createMachine)({
                                             }),
                                         onDone: [
                                             {
+                                                guard: ({ event })=>JSON.parse(event.output).location == "cancel",
+                                                target: "#root.DialogueManager.Ready.BeforeAskMeAnything"
+                                            },
+                                            {
                                                 guard: ({ event })=>JSON.parse(event.output).location == "unknown",
                                                 target: "AskLocation"
                                             },
@@ -1460,7 +1472,7 @@ const dmMachine = (0, _xstate.createMachine)({
                                             {
                                                 guard: ({ event })=>checkList(event.value[0].utterance.toLowerCase(), affirmation),
                                                 //target: "#root.DialogueManager.Ready.AskMeAnything", // no because context
-                                                target: "#root.DialogueManager.Ready.Bye"
+                                                target: "#root.DialogueManager.Ready.AskMeAnything"
                                             },
                                             {
                                                 target: "DidntUnderstand"
@@ -1859,6 +1871,11 @@ const dmMachine = (0, _xstate.createMachine)({
                                                 info: context.info
                                             }),
                                         onDone: [
+                                            // be careful here
+                                            {
+                                                guard: ({ event })=>event.output == "cancel",
+                                                target: "#root.DialogueManager.Ready.BeforeAskMeAnything"
+                                            },
                                             {
                                                 target: "SpeakFilterOutput",
                                                 actions: [
@@ -1946,6 +1963,11 @@ const dmMachine = (0, _xstate.createMachine)({
                                                 enemy: context.item
                                             }),
                                         onDone: [
+                                            // be careful here
+                                            {
+                                                guard: ({ event })=>event.output == "cancel",
+                                                target: "#root.DialogueManager.Ready.BeforeAskMeAnything"
+                                            },
                                             {
                                                 target: "SpeakFilterOutput",
                                                 actions: [
@@ -1992,25 +2014,25 @@ const dmMachine = (0, _xstate.createMachine)({
                                 AssignInfo: {
                                     always: [
                                         {
-                                            target: "StatusWeakness",
+                                            //guard: enemy_encyclopedia[context.item]["info"]["Statuses and immunities"] != , when no enemy in enemy encyclopedia
+                                            target: "PriorToSpeakStatus",
                                             actions: (0, _xstate.assign)({
                                                 statuses: ({ context })=>getVulnerableStatuses((0, _ff12DataEnemyEncyclopediaJsonDefault.default)[context.item]["info"]["Statuses and immunities"]),
                                                 weakness: ({ context })=>getElementalWeakness((0, _ff12DataEnemyEncyclopediaJsonDefault.default)[context.item]["info"]["Elemental affinities"]),
-                                                status: ({ context })=>0,
-                                                weak: ({ context })=>0
+                                                status: ({ context })=>2,
+                                                weak: ({ context })=>0,
+                                                strong: ({ context })=>0,
+                                                slow: ({ context })=>0
                                             })
                                         }
                                     ]
-                                },
-                                // delete after debug
-                                read: {
-                                    entry: ({ context })=>console.log(context.lastResult)
                                 },
                                 PriorToSpeakStatus: {
                                     always: [
                                         {
                                             guard: ({ context })=>context.statuses.length > 0,
-                                            target: "StatusWeakness"
+                                            target: "StatusWeakness",
+                                            actions: ({ context })=>console.log("is statuses bigger than 0? :", context.statuses.length > 0, "is elementals bigger than 0?? :", context.weakness.length > 0)
                                         },
                                         {
                                             target: "NoStatusWeakness"
@@ -2020,7 +2042,12 @@ const dmMachine = (0, _xstate.createMachine)({
                                 NoStatusWeakness: {
                                     entry: say(`Oof, this is a though one, it has no status weaknesses...`),
                                     on: {
-                                        SPEAK_COMPLETE: "ListenGPTsuccess"
+                                        SPEAK_COMPLETE: {
+                                            target: "ListenGPTsuccess",
+                                            actions: (0, _xstate.assign)({
+                                                status: ({ context })=>context.status + 4
+                                            })
+                                        }
                                     }
                                 },
                                 // Another way to have done the status selection woud have been to check length, randomize numbers depending on legth and go step by step indexing in every state to ensure variety, but length also changes so...
@@ -2036,9 +2063,12 @@ const dmMachine = (0, _xstate.createMachine)({
                                     on: {
                                         SPEAK_COMPLETE: {
                                             target: "ListenGPTsuccess",
-                                            actions: (0, _xstate.assign)({
-                                                status: ({ context })=>context.status + 1
-                                            })
+                                            actions: [
+                                                ({ context })=>console.log(context.weakness.length, context.slow, context.weakness),
+                                                (0, _xstate.assign)({
+                                                    status: ({ context })=>context.status + 1
+                                                })
+                                            ]
                                         }
                                     }
                                 },
@@ -2052,22 +2082,11 @@ const dmMachine = (0, _xstate.createMachine)({
                                                 (0, _xstate.assign)({
                                                     lastResult: ({ event })=>event.value[0].utterance
                                                 }),
-                                                ({ context })=>console.log(context.weak, context.status)
+                                                ({ context })=>console.log("how many weak has it given:", context.weak, "how many status has it given:", context.status)
                                             ]
                                         }
                                     }
                                 },
-                                // BeforeProcessGPTsuccess: {
-                                //   always: [
-                                //     {
-                                //       guard: ({ event, context }) => checkList(context.lastResult, affirmation),
-                                //       target: "OkayGreat",
-                                //     },
-                                //     {
-                                //       target: "ProcessGPTsuccess"
-                                //     }
-                                //   ]
-                                // },
                                 ProcessGPTsuccess: {
                                     invoke: {
                                         src: (0, _xstate.fromPromise)(async ({ input })=>{
@@ -2079,104 +2098,150 @@ const dmMachine = (0, _xstate.createMachine)({
                                             }),
                                         onDone: [
                                             {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "too fast" && checkList("Slow", context.statuses),
-                                                target: "TooFast",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "too fast" && checkList("Slow", context.statuses) == false,
-                                                target: "NoSlow",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event })=>JSON.parse(event.output).intent == "too strong",
-                                                target: "TooStrong",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.status == 1,
-                                                target: "PriorToNewStatusWeakness",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.status == 2,
-                                                target: "PriorToNewStatusWeakness2",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "affirmation",
-                                                target: "OkayGreat",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "wait",
-                                                target: "IWillWait",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "negation" && context.status == 1,
-                                                target: "PriorToNewStatusWeakness",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "negation" && context.weak == 1,
-                                                target: "PriorToNewElementalWeakness",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "negation" && context.status == 2,
-                                                target: "PriorToNewStatusWeakness2",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.weak == "full",
-                                                target: "PriorToTooStrong",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.status == "full",
-                                                target: "PriorToNewElementalWeakness",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.strong == "full",
-                                                target: "TooStrong",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                guard: ({ event, context })=>JSON.parse(event.output).intent == "end",
-                                                target: "OkayGoodLuck",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
-                                            },
-                                            {
-                                                target: "Nope",
-                                                actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                                target: "ChooseNextAction",
+                                                actions: ({ context })=>console.log("context-weakness length", context.weakness.length, "context-statuses length", context.statuses.length)
                                             }
                                         ]
                                     }
                                 },
+                                ChooseNextAction: {
+                                    always: [
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "too fast" && checkList("Slow", context.statuses) && context.slow == 0,
+                                            target: "TooFast",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "too fast" && checkList("Slow", context.statuses) && context.slow == 1,
+                                            target: "AlreadySuggestedSlow",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "too fast" && checkList("Slow", context.statuses) == false,
+                                            target: "NoSlow",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "too strong" && context.strong == 0,
+                                            target: "TooStrong",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "too strong" && context.strong == 1,
+                                            target: "AgainTooStrong",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        // general recommendations
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.status == 1 && context.statuses.length > 1,
+                                            target: "NewStatusWeakness",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.status == 2 && context.statuses.length > 2,
+                                            target: "NewStatusWeakness2",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.status == 3 && context.weak == 0,
+                                            target: "ElementalWeakness",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.weakness.length > 1 && context.weak == 1,
+                                            target: "NewElementalWeakness",
+                                            actions: ({ event, context })=>console.log(JSON.parse(event.output).intent, context.weak, context.weakness.length)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.weak == 2,
+                                            target: "TooStrong",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "ask recommendation" && context.strong == 1 && checkList("Slow", context.statuses) && context.slow == 0,
+                                            target: "TooFast",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        // negations
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "negation" && context.status == 1 && context.statuses.length > 1,
+                                            target: "NewStatusWeakness",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "negation" && context.status == 2 && context.statuses.length > 2,
+                                            target: "NewStatusWeakness2",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "negation" && context.status == 3 && context.weak == 0,
+                                            target: "ElementalWeakness",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "negation" && context.weakness.length > 1 && context.weak == 1,
+                                            target: "NewElementalWeakness",
+                                            actions: ({ event, context })=>console.log(JSON.parse(event.output).intent, context.weak, context.weakness.length)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "negation" && context.weak == 2 && context.strong == 0,
+                                            target: "TooStrong",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "negation" && context.strong == 1 && checkList("Slow", context.statuses) && context.slow == 0,
+                                            target: "TooFast",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        // others
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "affirmation",
+                                            target: "OkayGreat",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "wait",
+                                            target: "IWillWait",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            guard: ({ event, context })=>JSON.parse(event.output).intent == "end",
+                                            target: "OkayGoodLuck",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        },
+                                        {
+                                            target: "Nope",
+                                            actions: ({ event })=>console.log(JSON.parse(event.output).intent)
+                                        }
+                                    ]
+                                },
                                 Nope: {
-                                    entry: say("Sorry, couldn't catch that, can you repeat it?"),
+                                    entry: say(`${getRandomItemFromArray(notUnderstanding)}`),
                                     on: {
                                         SPEAK_COMPLETE: "ListenGPTsuccess"
                                     }
                                 },
                                 // Second step
-                                PriorToElementalWeakness: {
-                                    always: [
-                                        {
-                                            guard: ({ context })=>context.weakness.length > 0,
-                                            target: "ElementalWeakness"
-                                        },
-                                        {
-                                            target: "NoElementalWeakness"
-                                        }
-                                    ]
-                                },
+                                // PriorToElementalWeakness: {
+                                //   always: [
+                                //     {
+                                //       guard: ({context}) => context.weakness.length > 0,
+                                //       target: "ElementalWeakness"
+                                //     },
+                                //     {
+                                //       target: "NoElementalWeakness",
+                                //     }
+                                //   ]
+                                // },
                                 NoElementalWeakness: {
                                     entry: say(`oof, this is gonna be a bit hard, it has no elemental weaknesses. Maybe try using the technique Aquilles?`),
                                     on: {
-                                        SPEAK_COMPLETE: "ListenGPTsuccess"
+                                        SPEAK_COMPLETE: {
+                                            target: "ListenGPTsuccess",
+                                            actions: (0, _xstate.assign)({
+                                                weak: ({ context })=>context.weak + 3
+                                            })
+                                        }
                                     }
                                 },
                                 ElementalWeakness: {
@@ -2184,34 +2249,37 @@ const dmMachine = (0, _xstate.createMachine)({
                                         context.spstRef.send({
                                             type: "SPEAK",
                                             value: {
-                                                utterance: `${getRandomItemFromArray(positiveFiller)} Okay, now ${getRandomItemFromArray(whyDontYouTry)} ${getRandomItemFromArray(context.weakness)} weapons of magics?`
+                                                utterance: `${getRandomItemFromArray(positiveFiller)} Okay, now ${getRandomItemFromArray(whyDontYouTry)} any ${getRandomItemFromArray(context.weakness)} weapons or magics?`
                                             }
                                         });
                                     },
                                     on: {
                                         SPEAK_COMPLETE: {
-                                            target: "ListenGPTsuccess"
+                                            target: "ListenGPTsuccess",
+                                            actions: (0, _xstate.assign)({
+                                                weak: ({ context })=>context.weak + 1
+                                            })
                                         }
                                     }
                                 },
-                                PriorToNewStatusWeakness: {
-                                    always: [
-                                        {
-                                            guard: ({ context })=>context.status.length > 1,
-                                            target: "ElementalWeakness"
-                                        },
-                                        {
-                                            target: "NoMoreStatusWeakness"
-                                        }
-                                    ]
-                                },
+                                // PriorToNewStatusWeakness : {
+                                //   always: [
+                                //     {
+                                //       guard: ({ context }) => context.statuses.length > 1,
+                                //       target: "ElementalWeakness",
+                                //     },
+                                //     {
+                                //       target: "NoMoreStatusWeakness",
+                                //     }
+                                //   ]
+                                // },
                                 NoMoreStatusWeakness: {
                                     entry: say(`${getRandomItemFromArray(fillerWords)} Seems like it doesn't have any more...Status Vulnerabilities... `),
                                     on: {
                                         SPEAK_COMPLETE: {
                                             target: "ListenGPTsuccess",
                                             actions: (0, _xstate.assign)({
-                                                status: ({ context })=>"full"
+                                                status: ({ context })=>context.status + 4
                                             })
                                         }
                                     }
@@ -2222,32 +2290,32 @@ const dmMachine = (0, _xstate.createMachine)({
                                         SPEAK_COMPLETE: {
                                             target: "ListenGPTsuccess",
                                             actions: (0, _xstate.assign)({
-                                                weak: ({ context })=>"full"
+                                                weak: ({ context })=>context.weak + 3
                                             })
                                         }
                                     }
                                 },
-                                PriorToNewElementalWeakness: {
-                                    always: [
-                                        {
-                                            guard: ({ context })=>context.weakness == "full",
-                                            target: "NoMoreElementalWeakness"
-                                        },
-                                        {
-                                            guard: ({ context })=>context.weakness.length > 1,
-                                            target: "ElementalWeakness"
-                                        },
-                                        {
-                                            target: "NoMoreElementalWeakness"
-                                        }
-                                    ]
-                                },
+                                // PriorToNewElementalWeakness: {
+                                //   always: [
+                                //     {
+                                //       guard: ({context}) => context.weak == "full",
+                                //       target: "NoMoreElementalWeakness"
+                                //     },
+                                //     {
+                                //       guard: ({ context }) => context.weakness.length > 1,
+                                //       target: "NewElementalWeakness"
+                                //     },
+                                //     {
+                                //       target: "NoMoreElementalWeakness",
+                                //     }
+                                //   ]
+                                // },
                                 NewElementalWeakness: {
                                     entry: ({ event, context })=>{
                                         context.spstRef.send({
                                             type: "SPEAK",
                                             value: {
-                                                utterance: `${getRandomItemFromArray(positiveFiller)} Okay, this time ${getRandomItemFromArray(whyDontYouTry)} ${getRandomItemFromArray(context.weakness)} weapons of magics?`
+                                                utterance: `${getRandomItemFromArray(positiveFiller)} Okay, this time ${getRandomItemFromArray(whyDontYouTry)} any ${getRandomItemFromArray(context.weakness)} weapons or magics?`
                                             }
                                         });
                                     },
@@ -2255,7 +2323,7 @@ const dmMachine = (0, _xstate.createMachine)({
                                         SPEAK_COMPLETE: {
                                             target: "ListenGPTsuccess",
                                             actions: (0, _xstate.assign)({
-                                                weak: ({ context })=>context.status + 1
+                                                weak: ({ context })=>context.weak + 1
                                             })
                                         }
                                     }
@@ -2279,21 +2347,21 @@ const dmMachine = (0, _xstate.createMachine)({
                                         }
                                     }
                                 },
-                                PriorToNewStatusWeakness2: {
-                                    always: [
-                                        {
-                                            guard: ({ context })=>context.status == "full",
-                                            target: "NoMoreStatusWeakness"
-                                        },
-                                        {
-                                            guard: ({ context })=>context.status.length > 2,
-                                            target: "ElementalWeakness"
-                                        },
-                                        {
-                                            target: "NoMoreStatusWeakness"
-                                        }
-                                    ]
-                                },
+                                // PriorToNewStatusWeakness2 : {
+                                //   always: [
+                                //     {
+                                //       guard: ({context}) => context.status == "full",
+                                //       target: "NoMoreStatusWeakness"
+                                //     },
+                                //     {
+                                //       guard: ({ context }) => context.statuses.length > 2,
+                                //       target: "NewStatusWeakness2"
+                                //     },
+                                //     {
+                                //       target: "NoMoreStatusWeakness",
+                                //     }
+                                //   ]
+                                // },
                                 NewStatusWeakness2: {
                                     entry: ({ event, context })=>{
                                         context.spstRef.send({
@@ -2305,14 +2373,39 @@ const dmMachine = (0, _xstate.createMachine)({
                                     },
                                     on: {
                                         SPEAK_COMPLETE: {
-                                            target: "ListenGPTsuccess"
+                                            target: "ListenGPTsuccess",
+                                            actions: (0, _xstate.assign)({
+                                                status: ({ context })=>context.status + 1
+                                            })
                                         }
                                     }
+                                },
+                                // PriorToTooFast:{
+                                //   always: [
+                                //     {
+                                //       guard: ({context}) => context.slow == "full",
+                                //       target: "AlreadySuggestedSlow"
+                                //     },
+                                //     {
+                                //       target: "TooFast"
+                                //     }
+                                //   ]
+                                // },
+                                AlreadySuggestedSlow: {
+                                    entry: say(`${getRandomItemFromArray(positiveFiller)}...,Yeah, seems like you already know about using ... Slow`),
+                                    on: {
+                                        SPEAK_COMPLETE: "ListenGPTsuccess"
+                                    } // do we want this???
                                 },
                                 TooFast: {
                                     entry: say(`${getRandomItemFromArray(fillerWords)}..., ${getRandomItemFromArray(whyDontYouTry)} : ...Slow..., now?`),
                                     on: {
-                                        SPEAK_COMPLETE: "ListenGPTsuccess"
+                                        SPEAK_COMPLETE: {
+                                            target: "ListenGPTsuccess",
+                                            actions: (0, _xstate.assign)({
+                                                slow: ({ context })=>context.slow + 1
+                                            })
+                                        }
                                     } // do we want this???
                                 },
                                 NoSlow: {
@@ -2321,17 +2414,21 @@ const dmMachine = (0, _xstate.createMachine)({
                                         SPEAK_COMPLETE: "ListenGPTsuccess"
                                     }
                                 },
-                                PriorToTooStrong: {
-                                    always: [
-                                        {
-                                            guard: ({ context })=>context.strong == "full",
-                                            target: "AgainTooStrong"
-                                        },
-                                        {
-                                            target: "TooStrong"
-                                        }
-                                    ]
-                                },
+                                // PriorToTooStrong: {
+                                //   always : [
+                                //     {
+                                //       guard: ({context}) => context.strong == "full",
+                                //       target: "AgainTooStrong"
+                                //     },
+                                //     {
+                                //       target: "TooStrong"
+                                //     }
+                                //   ]
+                                // },
+                                // AgainTooFast : {
+                                //   entry: say(`${getRandomItemFromArray(fillerWords)}..., , as I've said before, try using ...Slow...to lower the enemy's pace `),
+                                //   on: {SPEAK_COMPLETE: "ListenGPTsuccess"}
+                                // },
                                 AgainTooStrong: {
                                     entry: say(`${getRandomItemFromArray(fillerWords)}..., , as I've said before, try using ...Wither... as much as you can so that it looses strength `),
                                     on: {
@@ -2344,7 +2441,7 @@ const dmMachine = (0, _xstate.createMachine)({
                                         SPEAK_COMPLETE: {
                                             target: "ListenGPTsuccess",
                                             actions: (0, _xstate.assign)({
-                                                strong: ({ context })=>"full"
+                                                strong: ({ context })=>context.strong + 1
                                             })
                                         }
                                     } //do we want this???
@@ -2441,15 +2538,20 @@ const dmMachine = (0, _xstate.createMachine)({
                                 RECOGNISED: [
                                     // error when reading AskGPT
                                     {
-                                        guard: ({ event, context })=>checkList(event.value[0].utterance.toLowerCase(), affirmation),
-                                        target: "BeforeAskMeAnything"
+                                        guard: ({ event, context })=>checkList(event.value[0].utterance.toLowerCase(), affirmation) && event.value[0].utterance.length < 15,
+                                        target: "BeforeAskMeAnything",
+                                        actions: ({ event })=>console.log(event.value[0].utterance.length)
                                     },
                                     {
-                                        guard: ({ event, context })=>checkList(event.value[0].utterance.toLowerCase(), negation),
-                                        target: "OkaySeeYa"
+                                        guard: ({ event, context })=>checkList(event.value[0].utterance.toLowerCase(), negation) && event.value[0].utterance.length < 15,
+                                        target: "OkaySeeYa",
+                                        actions: ({ event })=>console.log(event.value[0].utterance.length)
                                     },
                                     {
-                                        target: "BeforeAskMeAnything"
+                                        target: "TransitionJustBecause",
+                                        actions: (0, _xstate.assign)({
+                                            lastResult: ({ event })=>event.value[0].utterance
+                                        })
                                     }
                                 ]
                             }
@@ -2515,6 +2617,13 @@ const dmMachine = (0, _xstate.createMachine)({
 }, {
     // custom actions
     //
+    // guards: {
+    //   checkStatusesLength0:  ({ context }) => context.statuses.length > 0,
+    //   checkStatusesLength1: ({ context }) => context.statuses.length > 1,
+    //   checkStatusesLength2: ({ context }) => context.statuses.length > 2,
+    //   checkWeaknessLength0: ({ context }) => context.weakness.length > 0,
+    //   checkWeaknessLength1: ({ context }) => context.weakness.length > 1,
+    // },
     actions: {
         prepare: ({ context })=>context.spstRef.send({
                 type: "PREPARE"
